@@ -52,6 +52,7 @@ LOCAL_REGION = "local"
 LOG_LEVEL = "INFO"
 DATA_DUMP = "dump"
 RESTORE_WRITE_CAPACITY = 25
+RESTORE_READ_CAPACITY = 25
 THREAD_START_DELAY = 1  # seconds
 CURRENT_WORKING_DIR = os.getcwd()
 DEFAULT_PREFIX_SEPARATOR = "-"
@@ -642,13 +643,20 @@ def do_restore(dynamo, sleep_interval, source_table, destination_table, write_ca
     table_local_secondary_indexes = table.get("LocalSecondaryIndexes")
     table_global_secondary_indexes = table.get("GlobalSecondaryIndexes")
 
+    if original_write_capacity < 1:
+        original_write_capacity = RESTORE_WRITE_CAPACITY
+
     # override table write capacity if specified, else use RESTORE_WRITE_CAPACITY if original
     # write capacity is lower
-    if write_capacity is None:
+    if write_capacity is None or write_capacity < 1:
         if original_write_capacity < RESTORE_WRITE_CAPACITY:
             write_capacity = RESTORE_WRITE_CAPACITY
         else:
             write_capacity = original_write_capacity
+
+    # overwrite read capacity with some default value
+    if original_read_capacity is None or original_read_capacity < 1:
+        original_read_capacity = RESTORE_READ_CAPACITY
 
     # override GSI write capacities if specified, else use RESTORE_WRITE_CAPACITY if original
     # write capacity is lower
@@ -656,6 +664,9 @@ def do_restore(dynamo, sleep_interval, source_table, destination_table, write_ca
     if table_global_secondary_indexes is not None:
         for gsi in table_global_secondary_indexes:
             original_gsi_write_capacities.append(gsi["ProvisionedThroughput"]["WriteCapacityUnits"])
+
+            if gsi["ProvisionedThroughput"]["ReadCapacityUnits"] < int(original_read_capacity):
+                gsi["ProvisionedThroughput"]["ReadCapacityUnits"] = int(original_read_capacity)
 
             if gsi["ProvisionedThroughput"]["WriteCapacityUnits"] < int(write_capacity):
                 gsi["ProvisionedThroughput"]["WriteCapacityUnits"] = int(write_capacity)
